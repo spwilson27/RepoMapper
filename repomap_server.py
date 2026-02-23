@@ -16,9 +16,41 @@ from importance import filter_important_files
 def find_src_files(directory: str) -> List[str]:
     if not os.path.isdir(directory):
         return [directory] if os.path.isfile(directory) else []
+        
+    # Attempt to load from the unified config.json first
+    possible_tools_dir = os.path.join(os.path.abspath(directory), ".tools")
+    config_path = os.path.join(possible_tools_dir, "config.json")
+    
+    if os.path.isfile(config_path):
+        try:
+            import sys
+            if possible_tools_dir not in sys.path:
+                sys.path.insert(0, possible_tools_dir)
+            from config_utils import load_config, expand_source_files
+            sources, skip_dirs, _ = load_config(config_path)
+            
+            all_files = []
+            for src in sources:
+                all_files.extend(expand_source_files(src, skip_dirs))
+            
+            return list(set(all_files)) # Deduplicate
+        except Exception as e:
+            import logging
+            logging.warning(f"Failed to load uniform config.json: {e}. Falling back to default os.walk.")
+    
     src_files = []
+    
+    # Directories we explicitly want to skip
+    skip_dirs = {'.git', '.vscode', '.idea', '.venv', '.cursor', '__pycache__', 'node_modules', 'venv', 'env'}
+    
     for r, d, f_list in os.walk(directory):
-        d[:] = [d_name for d_name in d if not d_name.startswith('.') and d_name not in {'node_modules', '__pycache__', 'venv', 'env'}]
+        # We allow `.tools` but otherwise skip standard hidden directories
+        d[:] = [
+            d_name for d_name in d 
+            if d_name not in skip_dirs 
+            and (not d_name.startswith('.') or d_name == '.tools' or d_name == '.github')
+        ]
+        
         for f in f_list:
             if not f.startswith('.'):
                 src_files.append(os.path.join(r, f))

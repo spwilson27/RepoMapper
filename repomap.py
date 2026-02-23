@@ -20,14 +20,40 @@ from repomap_class import RepoMap
 
 
 def find_src_files(directory: str) -> List[str]:
-    """Find source files in a directory."""
+    """Find source files using .tools/config.json if available, or fallback to os.walk."""
     if not os.path.isdir(directory):
         return [directory] if os.path.isfile(directory) else []
     
+    # Attempt to load from the unified config.json first
+    possible_tools_dir = os.path.join(os.path.abspath(directory), ".tools")
+    config_path = os.path.join(possible_tools_dir, "config.json")
+    
+    if os.path.isfile(config_path):
+        try:
+            import sys
+            if possible_tools_dir not in sys.path:
+                sys.path.insert(0, possible_tools_dir)
+            from config_utils import load_config, expand_source_files
+            sources, skip_dirs, _ = load_config(config_path)
+            
+            all_files = []
+            for src in sources:
+                all_files.extend(expand_source_files(src, skip_dirs))
+            
+            return list(set(all_files)) # Deduplicate
+        except Exception as e:
+            tool_warning(f"Failed to load uniform config.json: {e}. Falling back to default os.walk.")
+    
     src_files = []
+    skip_dirs = {'.git', '.vscode', '.idea', '.venv', '.cursor', '__pycache__', 'node_modules', 'venv', 'env'}
+
     for root, dirs, files in os.walk(directory):
-        # Skip hidden directories and common non-source directories
-        dirs[:] = [d for d in dirs if not d.startswith('.') and d not in {'node_modules', '__pycache__', 'venv', 'env'}]
+        # Skip hidden directories and common non-source directories, but allow .tools
+        dirs[:] = [
+            d for d in dirs 
+            if d not in skip_dirs 
+            and (not d.startswith('.') or d == '.tools' or d == '.github')
+        ]
         
         for file in files:
             if not file.startswith('.'):
@@ -162,7 +188,8 @@ Examples:
         unresolved_paths_for_other_files_specs.extend(args.other_files)
     elif args.paths:  # Else, if positional paths are given, they are the source
         unresolved_paths_for_other_files_specs.extend(args.paths)
-    # If neither, unresolved_paths_for_other_files_specs remains empty.
+    else: # If neither, fallback to searching the entirety of the root directory
+        unresolved_paths_for_other_files_specs.append(args.root)
 
     # Now, expand all directory paths in unresolved_paths_for_other_files_specs into actual file lists
     # and collect all file paths. find_src_files handles both files and directories.

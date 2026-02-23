@@ -516,13 +516,7 @@ class RepoMap:
         
         if not ranked_tags:
             return None, file_report
-        
-        # Filter important files
-        important_files = filter_important_files(
-            [self.get_rel_fname(f) for f in other_fnames]
-        )
-        
-        # Binary search to find the right number of tags
+            
         chat_rel_fnames = set(self.get_rel_fname(f) for f in chat_fnames)
         
         def try_tags(num_tags: int) -> Tuple[Optional[str], int]:
